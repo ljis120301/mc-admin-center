@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 export default function Home() {
   const [serverStatus, setServerStatus] = useState('offline');
@@ -15,11 +15,58 @@ export default function Home() {
   const [command, setCommand] = useState('');
   const [commandHistory, setCommandHistory] = useState([]);
   const [commandOutput, setCommandOutput] = useState([]);
+  const [lastUpdate, setLastUpdate] = useState(null);
 
-  // Fetch initial server status
+  // Function to check for server updates
+  const checkServerStatus = useCallback(async () => {
+    try {
+      const response = await fetch('/api/server', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'refresh' }),
+      });
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to get server status');
+      }
+
+      // Only update if there are actual changes
+      const hasChanges = 
+        data.status !== serverStatus ||
+        JSON.stringify(data.players) !== JSON.stringify(playerList) ||
+        data.maxPlayers !== serverInfo.maxPlayers ||
+        data.version !== serverInfo.version;
+
+      if (hasChanges) {
+        setServerStatus(data.status || 'offline');
+        setPlayerList(data.players || []);
+        setServerInfo({
+          maxPlayers: data.maxPlayers || 0,
+          version: data.version || null,
+          error: data.error || null
+        });
+        setLastUpdate(new Date());
+      }
+    } catch (error) {
+      console.error('Error checking server status:', error);
+      setError(error.message || 'Failed to check server status');
+    }
+  }, [serverStatus, playerList, serverInfo]);
+
+  // Initial server status check
   useEffect(() => {
-    handleServerAction('refresh');
+    checkServerStatus();
   }, []);
+
+  // Set up polling interval
+  useEffect(() => {
+    const pollInterval = setInterval(checkServerStatus, 5000); // Check every 5 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [checkServerStatus]);
 
   const handleServerAction = async (action, commandText = null) => {
     setIsLoading(true);
@@ -43,20 +90,11 @@ export default function Home() {
 
       // Handle different actions
       switch (action) {
-        case 'refresh':
-          setServerStatus(data.status || 'offline');
-          setPlayerList(data.players || []);
-          setServerInfo({
-            maxPlayers: data.maxPlayers || 0,
-            version: data.version || null,
-            error: data.error || null
-          });
-          break;
         case 'start':
         case 'stop':
         case 'restart':
-          // Wait a moment and then refresh status
-          setTimeout(() => handleServerAction('refresh'), 5000);
+          // Wait a moment and then check status
+          setTimeout(checkServerStatus, 5000);
           break;
         case 'command':
           // Add command to history and output
@@ -106,6 +144,11 @@ export default function Home() {
             <div className={`w-3 h-3 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : 'bg-red-500'}`}></div>
             <span className="capitalize">{serverStatus}</span>
             {isLoading && <span className="text-sm text-gray-500">(Updating...)</span>}
+            {lastUpdate && (
+              <span className="text-sm text-gray-500">
+                (Last updated: {lastUpdate.toLocaleTimeString()})
+              </span>
+            )}
           </div>
           
           {/* Server Info */}
@@ -199,7 +242,7 @@ export default function Home() {
               Restart Server
             </button>
             <button
-              onClick={() => handleServerAction('refresh')}
+              onClick={checkServerStatus}
               disabled={isLoading}
               className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
             >

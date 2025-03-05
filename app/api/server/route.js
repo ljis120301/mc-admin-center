@@ -3,6 +3,10 @@ import util from 'minecraft-server-util';
 import { Rcon } from 'rcon-client';
 import fs from 'fs';
 import path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 const RCON_CONFIG = {
   host: process.env.MINECRAFT_HOST,
@@ -10,6 +14,8 @@ const RCON_CONFIG = {
   password: process.env.RCON_PASSWORD,
   gamePort: 25565
 };
+
+const CONTROL_SCRIPT = path.join(process.cwd(), 'scripts', 'remote-server-control.sh');
 
 // Helper function to check server status
 async function checkServerStatus() {
@@ -129,6 +135,34 @@ async function readServerLogs() {
   }
 }
 
+// Helper function to start the server
+async function startServer() {
+  try {
+    console.log('Starting server...');
+    const { stdout, stderr } = await execAsync(`${CONTROL_SCRIPT} start`);
+    console.log('Server start command output:', stdout);
+    if (stderr) console.error('Server start errors:', stderr);
+    return true;
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    throw error;
+  }
+}
+
+// Helper function to stop the server
+async function stopServer() {
+  try {
+    console.log('Stopping server...');
+    const { stdout, stderr } = await execAsync(`${CONTROL_SCRIPT} stop`);
+    console.log('Server stop command output:', stdout);
+    if (stderr) console.error('Server stop errors:', stderr);
+    return true;
+  } catch (error) {
+    console.error('Failed to stop server:', error);
+    throw error;
+  }
+}
+
 export async function POST(request) {
   try {
     const { action, command } = await request.json();
@@ -153,17 +187,36 @@ export async function POST(request) {
 
     switch (action) {
       case 'start':
-        return NextResponse.json({
-          success: true,
-          status: 'offline',
-          message: 'Server start command received. Note: This requires additional server setup.',
-          error: null
-        });
+        try {
+          console.log('Attempting to start server...');
+          await startServer();
+          console.log('Server start command sent successfully');
+          
+          // Wait a bit for the server to start up
+          await new Promise(resolve => setTimeout(resolve, 10000));
+          
+          // Check if server is now online
+          const status = await checkServerStatus();
+          return NextResponse.json({
+            success: true,
+            status: status.status,
+            message: 'Server starting...',
+            error: null
+          });
+        } catch (error) {
+          console.error('Failed to start server:', error);
+          return NextResponse.json({
+            success: false,
+            status: 'error',
+            message: `Failed to start server: ${error.message}`,
+            error: error.message
+          }, { status: 500 });
+        }
 
       case 'stop':
         try {
           console.log('Attempting to stop server...');
-          await sendRconCommand('stop');
+          await stopServer();
           console.log('Stop command sent successfully');
           return NextResponse.json({
             success: true,
