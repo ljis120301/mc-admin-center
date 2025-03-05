@@ -163,9 +163,198 @@ async function stopServer() {
   }
 }
 
+// Helper function to check if a player has OP
+async function checkPlayerOp(player) {
+  try {
+    const rcon = new Rcon({
+      host: RCON_CONFIG.host,
+      port: RCON_CONFIG.port,
+      password: RCON_CONFIG.password
+    });
+
+    await rcon.connect();
+    const response = await rcon.send(`op ${player}`);
+    await rcon.end();
+
+    // If the response contains "already an op", the player is already an op
+    return response.toLowerCase().includes('already an op');
+  } catch (error) {
+    console.error(`Failed to check OP status for ${player}:`, error);
+    return false;
+  }
+}
+
+// Helper function to toggle player OP status
+async function togglePlayerOp(player, shouldBeOp) {
+  try {
+    const rcon = new Rcon({
+      host: RCON_CONFIG.host,
+      port: RCON_CONFIG.port,
+      password: RCON_CONFIG.password
+    });
+
+    await rcon.connect();
+    const command = shouldBeOp ? 'op' : 'deop';
+    const response = await rcon.send(`${command} ${player}`);
+    await rcon.end();
+
+    return {
+      success: true,
+      message: response
+    };
+  } catch (error) {
+    console.error(`Failed to toggle OP status for ${player}:`, error);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+}
+
+// Helper function to get banned players list
+async function getBannedPlayers() {
+  try {
+    const rcon = new Rcon({
+      host: RCON_CONFIG.host,
+      port: RCON_CONFIG.port,
+      password: RCON_CONFIG.password
+    });
+
+    await rcon.connect();
+    const response = await rcon.send('banlist');
+    await rcon.end();
+
+    console.log('Banlist response:', response);
+
+    // If the response indicates no bans, return empty array
+    if (response.toLowerCase().includes('there are no bans')) {
+      return [];
+    }
+
+    // Parse the banlist response
+    const lines = response.split('\n');
+    const bannedPlayers = lines
+      .filter(line => line.trim().length > 0) // Remove empty lines
+      .filter(line => !line.toLowerCase().includes('banned players:')) // Skip header
+      .filter(line => !/^\d+$/.test(line)) // Skip number lines
+      .filter(line => !line.toLowerCase().includes('there are no bans')) // Skip "no bans" message
+      .map(line => {
+        // Extract player name and reason
+        // Example: "player was banned by Rcon: Banned by an operator."
+        const match = line.match(/^([^\s]+)\s+(.*)/);
+        if (match) {
+          return {
+            name: match[1],
+            reason: match[2]
+          };
+        }
+        return null;
+      })
+      .filter(player => player !== null); // Remove any null entries
+
+    console.log('Parsed banned players:', bannedPlayers);
+    return bannedPlayers;
+  } catch (error) {
+    console.error('Failed to get banned players:', error);
+    return [];
+  }
+}
+
+// Helper function to ban a player
+async function banPlayer(player) {
+  try {
+    const rcon = new Rcon({
+      host: RCON_CONFIG.host,
+      port: RCON_CONFIG.port,
+      password: RCON_CONFIG.password
+    });
+
+    await rcon.connect();
+    const response = await rcon.send(`ban ${player}`);
+    await rcon.end();
+
+    console.log('Ban response:', response);
+
+    // Check if the ban was successful
+    const success = response.toLowerCase().includes('banned') || 
+                   response.toLowerCase().includes('already banned');
+
+    return {
+      success,
+      message: response
+    };
+  } catch (error) {
+    console.error(`Failed to ban player ${player}:`, error);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+}
+
+// Helper function to unban a player
+async function unbanPlayer(player) {
+  try {
+    const rcon = new Rcon({
+      host: RCON_CONFIG.host,
+      port: RCON_CONFIG.port,
+      password: RCON_CONFIG.password
+    });
+
+    await rcon.connect();
+    // Clean the player name to ensure it's just the username
+    const cleanPlayerName = player.split(' ')[0];
+    const response = await rcon.send(`pardon ${cleanPlayerName}`);
+    await rcon.end();
+
+    console.log('Unban response:', response);
+
+    // Check if the unban was successful
+    const success = response.toLowerCase().includes('unbanned') || 
+                   response.toLowerCase().includes('not banned');
+
+    return {
+      success,
+      message: response
+    };
+  } catch (error) {
+    console.error(`Failed to unban player ${player}:`, error);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+}
+
+// Helper function to kick a player
+async function kickPlayer(player) {
+  try {
+    const rcon = new Rcon({
+      host: RCON_CONFIG.host,
+      port: RCON_CONFIG.port,
+      password: RCON_CONFIG.password
+    });
+
+    await rcon.connect();
+    const response = await rcon.send(`kick ${player}`);
+    await rcon.end();
+
+    return {
+      success: true,
+      message: response
+    };
+  } catch (error) {
+    console.error(`Failed to kick player ${player}:`, error);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+}
+
 export async function POST(request) {
   try {
-    const { action, command } = await request.json();
+    const { action, command, player, opAction } = await request.json();
 
     if (!action) {
       return NextResponse.json({
@@ -295,6 +484,73 @@ export async function POST(request) {
           logs,
           error: null
         });
+
+      case 'checkOp':
+        if (!player) {
+          return NextResponse.json({
+            success: false,
+            message: 'No player specified',
+            error: 'No player specified'
+          }, { status: 400 });
+        }
+
+        const isOp = await checkPlayerOp(player);
+        return NextResponse.json({
+          success: true,
+          isOp
+        });
+
+      case 'toggleOp':
+        if (!player || opAction === undefined) {
+          return NextResponse.json({
+            success: false,
+            message: 'Missing player or opAction',
+            error: 'Missing parameters'
+          }, { status: 400 });
+        }
+
+        const result = await togglePlayerOp(player, opAction);
+        return NextResponse.json(result);
+
+      case 'getBannedPlayers':
+        const bannedPlayers = await getBannedPlayers();
+        return NextResponse.json({
+          success: true,
+          bannedPlayers
+        });
+
+      case 'banPlayer':
+        if (!player) {
+          return NextResponse.json({
+            success: false,
+            message: 'No player specified',
+            error: 'No player specified'
+          }, { status: 400 });
+        }
+        const banResult = await banPlayer(player);
+        return NextResponse.json(banResult);
+
+      case 'unbanPlayer':
+        if (!player) {
+          return NextResponse.json({
+            success: false,
+            message: 'No player specified',
+            error: 'No player specified'
+          }, { status: 400 });
+        }
+        const unbanResult = await unbanPlayer(player);
+        return NextResponse.json(unbanResult);
+
+      case 'kickPlayer':
+        if (!player) {
+          return NextResponse.json({
+            success: false,
+            message: 'No player specified',
+            error: 'No player specified'
+          }, { status: 400 });
+        }
+        const kickResult = await kickPlayer(player);
+        return NextResponse.json(kickResult);
 
       default:
         return NextResponse.json({

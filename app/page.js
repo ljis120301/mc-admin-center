@@ -1,6 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export default function Home() {
   const [serverStatus, setServerStatus] = useState('offline');
@@ -16,6 +24,9 @@ export default function Home() {
   const [commandHistory, setCommandHistory] = useState([]);
   const [commandOutput, setCommandOutput] = useState([]);
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [playerOpStatus, setPlayerOpStatus] = useState({});
+  const [bannedPlayers, setBannedPlayers] = useState([]);
+  const [isLoadingBanned, setIsLoadingBanned] = useState(false);
 
   // Function to check for server updates
   const checkServerStatus = useCallback(async () => {
@@ -49,16 +60,111 @@ export default function Home() {
           error: data.error || null
         });
         setLastUpdate(new Date());
+
+        // Check OP status for new players
+        if (data.players) {
+          data.players.forEach(player => {
+            if (!(player in playerOpStatus)) {
+              checkPlayerOpStatus(player);
+            }
+          });
+        }
       }
     } catch (error) {
       console.error('Error checking server status:', error);
       setError(error.message || 'Failed to check server status');
     }
-  }, [serverStatus, playerList, serverInfo]);
+  }, [serverStatus, playerList, serverInfo, playerOpStatus]);
+
+  // Function to get banned players
+  const getBannedPlayers = async () => {
+    setIsLoadingBanned(true);
+    try {
+      const response = await fetch('/api/server', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'getBannedPlayers' }),
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setBannedPlayers(data.bannedPlayers);
+      }
+    } catch (error) {
+      console.error('Failed to get banned players:', error);
+      setError('Failed to get banned players list');
+    } finally {
+      setIsLoadingBanned(false);
+    }
+  };
+
+  // Function to handle player actions (kick/ban)
+  const handlePlayerAction = async (player, action) => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/server', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          action: action === 'kick' ? 'kickPlayer' : 'banPlayer',
+          player 
+        }),
+      });
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.message || `Failed to ${action} player`);
+      }
+
+      // Refresh player lists
+      checkServerStatus();
+      getBannedPlayers();
+    } catch (error) {
+      console.error(`Failed to ${action} player:`, error);
+      setError(error.message || `Failed to ${action} player`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Function to handle unban
+  const handleUnban = async (player) => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/server', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          action: 'unbanPlayer',
+          player 
+        }),
+      });
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to unban player');
+      }
+
+      // Refresh banned players list
+      getBannedPlayers();
+    } catch (error) {
+      console.error('Failed to unban player:', error);
+      setError(error.message || 'Failed to unban player');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Initial server status check
   useEffect(() => {
     checkServerStatus();
+    getBannedPlayers();
   }, []);
 
   // Set up polling interval
@@ -67,6 +173,62 @@ export default function Home() {
 
     return () => clearInterval(pollInterval);
   }, [checkServerStatus]);
+
+  // Function to check OP status for a player
+  const checkPlayerOpStatus = async (player) => {
+    try {
+      const response = await fetch('/api/server', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          action: 'checkOp',
+          player 
+        }),
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setPlayerOpStatus(prev => ({
+          ...prev,
+          [player]: data.isOp
+        }));
+      }
+    } catch (error) {
+      console.error(`Failed to check OP status for ${player}:`, error);
+    }
+  };
+
+  // Function to toggle OP status
+  const togglePlayerOp = async (player, currentStatus) => {
+    try {
+      const response = await fetch('/api/server', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          action: 'toggleOp',
+          player,
+          opAction: !currentStatus
+        }),
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setPlayerOpStatus(prev => ({
+          ...prev,
+          [player]: !currentStatus
+        }));
+      } else {
+        throw new Error(data.message || 'Failed to toggle OP status');
+      }
+    } catch (error) {
+      console.error(`Failed to toggle OP status for ${player}:`, error);
+      setError(error.message || 'Failed to toggle OP status');
+    }
+  };
 
   const handleServerAction = async (action, commandText = null) => {
     setIsLoading(true);
@@ -168,18 +330,125 @@ export default function Home() {
         {/* Player List */}
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">Online Players</h2>
-          <div className="space-y-2">
-            {playerList.length > 0 ? (
-              playerList.map((player, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                  <span>{player}</span>
-                </div>
-              ))
-            ) : (
-              <p className="text-gray-500">No players online</p>
-            )}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Status</TableHead>
+                <TableHead>Player Name</TableHead>
+                <TableHead>OP Status</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {playerList.length > 0 ? (
+                playerList.map((player) => (
+                  <TableRow key={player}>
+                    <TableCell>
+                      <span className="w-2 h-2 bg-green-500 rounded-full inline-block mr-2"></span>
+                      Online
+                    </TableCell>
+                    <TableCell>{player}</TableCell>
+                    <TableCell>
+                      {playerOpStatus[player] ? (
+                        <span className="text-green-600 font-medium">OP</span>
+                      ) : (
+                        <span className="text-gray-500">Player</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => togglePlayerOp(player, playerOpStatus[player])}
+                          className={`px-3 py-1 rounded text-sm font-medium ${
+                            playerOpStatus[player]
+                              ? 'bg-red-500 hover:bg-red-600 text-white'
+                              : 'bg-green-500 hover:bg-green-600 text-white'
+                          }`}
+                          disabled={isLoading}
+                        >
+                          {playerOpStatus[player] ? 'Remove OP' : 'Give OP'}
+                        </button>
+                        <button
+                          onClick={() => handlePlayerAction(player, 'kick')}
+                          className="px-3 py-1 rounded text-sm font-medium bg-yellow-500 hover:bg-yellow-600 text-white"
+                          disabled={isLoading}
+                        >
+                          Kick
+                        </button>
+                        <button
+                          onClick={() => handlePlayerAction(player, 'ban')}
+                          className="px-3 py-1 rounded text-sm font-medium bg-red-500 hover:bg-red-600 text-white"
+                          disabled={isLoading}
+                        >
+                          Ban
+                        </button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-gray-500">
+                    No players online
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Banned Players List */}
+        <div className="bg-white rounded-lg shadow p-6 mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Banned Players</h2>
+            <button
+              onClick={getBannedPlayers}
+              disabled={isLoadingBanned}
+              className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+            >
+              {isLoadingBanned ? 'Refreshing...' : 'Refresh List'}
+            </button>
           </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Player Name</TableHead>
+                <TableHead>Ban Reason</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoadingBanned ? (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-center text-gray-500">
+                    Loading banned players...
+                  </TableCell>
+                </TableRow>
+              ) : bannedPlayers.length > 0 ? (
+                bannedPlayers.map((player) => (
+                  <TableRow key={player.name}>
+                    <TableCell className="font-medium">{player.name}</TableCell>
+                    <TableCell className="text-gray-600">{player.reason}</TableCell>
+                    <TableCell>
+                      <button
+                        onClick={() => handleUnban(player.name)}
+                        className="px-3 py-1 rounded text-sm font-medium bg-green-500 hover:bg-green-600 text-white"
+                        disabled={isLoading}
+                      >
+                        Unban
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-center text-gray-500">
+                    No banned players
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
 
         {/* Command Console */}
