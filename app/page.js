@@ -9,6 +9,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import Button from "@/components/ui/button";
+import { Terminal, Command } from "@/components/ui/terminal";
 
 export default function Home() {
   const [serverStatus, setServerStatus] = useState('offline');
@@ -288,33 +296,31 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
+    <div className="p-8 bg-[#1A1A1A] min-h-screen">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">Minecraft Server Control Panel</h1>
-        
         {/* Error Message */}
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+          <div className="bg-red-900/50 border border-red-700 text-red-200 px-4 py-3 rounded mb-6">
             {error}
           </div>
         )}
         
         {/* Server Status */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Server Status</h2>
+        <div className="bg-[#2C2C2C] rounded-lg shadow-lg p-6 mb-6 border border-[#3C3C3C]">
+          <h2 className="text-xl font-semibold mb-4 text-white">Server Status</h2>
           <div className="flex items-center gap-2 mb-4">
             <div className={`w-3 h-3 rounded-full ${serverStatus === 'online' ? 'bg-green-500' : 'bg-red-500'}`}></div>
-            <span className="capitalize">{serverStatus}</span>
-            {isLoading && <span className="text-sm text-gray-500">(Updating...)</span>}
+            <span className="capitalize text-white">{serverStatus}</span>
+            {isLoading && <span className="text-sm text-gray-400">(Updating...)</span>}
             {lastUpdate && (
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-gray-400">
                 (Last updated: {lastUpdate.toLocaleTimeString()})
               </span>
             )}
           </div>
           
           {/* Server Info */}
-          <div className="mt-4 space-y-2 text-sm text-gray-600">
+          <div className="mt-4 space-y-2 text-sm text-gray-300">
             {serverInfo.version && (
               <div>Version: {serverInfo.version}</div>
             )}
@@ -322,201 +328,208 @@ export default function Home() {
               <div>Max Players: {serverInfo.maxPlayers}</div>
             )}
             {serverInfo.error && (
-              <div className="text-red-500">Connection Error: {serverInfo.error}</div>
+              <div className="text-red-400">Connection Error: {serverInfo.error}</div>
             )}
           </div>
         </div>
 
-        {/* Player List */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Online Players</h2>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Status</TableHead>
-                <TableHead>Player Name</TableHead>
-                <TableHead>OP Status</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {playerList.length > 0 ? (
-                playerList.map((player) => (
-                  <TableRow key={player}>
-                    <TableCell>
-                      <span className="w-2 h-2 bg-green-500 rounded-full inline-block mr-2"></span>
-                      Online
-                    </TableCell>
-                    <TableCell>{player}</TableCell>
-                    <TableCell>
-                      {playerOpStatus[player] ? (
-                        <span className="text-green-600 font-medium">OP</span>
-                      ) : (
-                        <span className="text-gray-500">Player</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => togglePlayerOp(player, playerOpStatus[player])}
-                          className={`px-3 py-1 rounded text-sm font-medium ${
-                            playerOpStatus[player]
-                              ? 'bg-red-500 hover:bg-red-600 text-white'
-                              : 'bg-green-500 hover:bg-green-600 text-white'
-                          }`}
-                          disabled={isLoading}
-                        >
-                          {playerOpStatus[player] ? 'Remove OP' : 'Give OP'}
-                        </button>
-                        <button
-                          onClick={() => handlePlayerAction(player, 'kick')}
-                          className="px-3 py-1 rounded text-sm font-medium bg-yellow-500 hover:bg-yellow-600 text-white"
-                          disabled={isLoading}
-                        >
-                          Kick
-                        </button>
-                        <button
-                          onClick={() => handlePlayerAction(player, 'ban')}
-                          className="px-3 py-1 rounded text-sm font-medium bg-red-500 hover:bg-red-600 text-white"
-                          disabled={isLoading}
-                        >
-                          Ban
-                        </button>
-                      </div>
-                    </TableCell>
+        {/* Players Tabs */}
+        <div className="bg-[#2C2C2C] rounded-lg shadow-lg p-6 mb-6 border border-[#3C3C3C]">
+          <Tabs defaultValue="online" className="w-full">
+            <TabsList className="mb-4 bg-[#1A1A1A] p-1 rounded-none flex gap-1">
+              <TabsTrigger 
+                value="online" 
+                className="data-[state=active]:bg-[#4CAF50] data-[state=active]:text-white rounded-none"
+              >
+                <Button variant="green">
+                  Online Players
+                </Button>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="banned"
+                className="data-[state=active]:bg-[#B71C1C] data-[state=active]:text-white rounded-none"
+              >
+                <Button variant="red">
+                  Banned Players
+                </Button>
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="online">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-[#3C3C3C]">
+                    <TableHead className="text-gray-300">Status</TableHead>
+                    <TableHead className="text-gray-300">Player Name</TableHead>
+                    <TableHead className="text-gray-300">OP Status</TableHead>
+                    <TableHead className="text-gray-300">Actions</TableHead>
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-gray-500">
-                    No players online
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                </TableHeader>
+                <TableBody>
+                  {playerList.length > 0 ? (
+                    playerList.map((player) => (
+                      <TableRow key={player} className="border-[#3C3C3C]">
+                        <TableCell className="text-gray-300">
+                          <span className="w-2 h-2 bg-green-500 rounded-full inline-block mr-2"></span>
+                          Online
+                        </TableCell>
+                        <TableCell className="text-gray-300">{player}</TableCell>
+                        <TableCell>
+                          {playerOpStatus[player] ? (
+                            <span className="text-green-400 font-medium">OP</span>
+                          ) : (
+                            <span className="text-gray-400">Player</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => togglePlayerOp(player, playerOpStatus[player])}
+                              disabled={isLoading}
+                            >
+                              {playerOpStatus[player] ? 'Remove OP' : 'Give OP'}
+                            </Button>
+                            <Button
+                              onClick={() => handlePlayerAction(player, 'kick')}
+                              disabled={isLoading}
+                            >
+                              Kick
+                            </Button>
+                            <Button
+                              onClick={() => handlePlayerAction(player, 'ban')}
+                              disabled={isLoading}
+                            >
+                              Ban
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow className="border-[#3C3C3C]">
+                      <TableCell colSpan={4} className="text-center text-gray-400">
+                        No players online
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TabsContent>
 
-        {/* Banned Players List */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Banned Players</h2>
-            <button
-              onClick={getBannedPlayers}
-              disabled={isLoadingBanned}
-              className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-            >
-              {isLoadingBanned ? 'Refreshing...' : 'Refresh List'}
-            </button>
-          </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Player Name</TableHead>
-                <TableHead>Ban Reason</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoadingBanned ? (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-center text-gray-500">
-                    Loading banned players...
-                  </TableCell>
-                </TableRow>
-              ) : bannedPlayers.length > 0 ? (
-                bannedPlayers.map((player) => (
-                  <TableRow key={player.name}>
-                    <TableCell className="font-medium">{player.name}</TableCell>
-                    <TableCell className="text-gray-600">{player.reason}</TableCell>
-                    <TableCell>
-                      <button
-                        onClick={() => handleUnban(player.name)}
-                        className="px-3 py-1 rounded text-sm font-medium bg-green-500 hover:bg-green-600 text-white"
-                        disabled={isLoading}
-                      >
-                        Unban
-                      </button>
-                    </TableCell>
+            <TabsContent value="banned">
+              <div className="flex justify-end mb-4">
+                <Button
+                  onClick={getBannedPlayers}
+                  disabled={isLoadingBanned}
+                >
+                  {isLoadingBanned ? 'Refreshing...' : 'Refresh List'}
+                </Button>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-[#3C3C3C]">
+                    <TableHead className="text-gray-300">Player Name</TableHead>
+                    <TableHead className="text-gray-300">Ban Reason</TableHead>
+                    <TableHead className="text-gray-300">Actions</TableHead>
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-center text-gray-500">
-                    No banned players
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {isLoadingBanned ? (
+                    <TableRow className="border-[#3C3C3C]">
+                      <TableCell colSpan={3} className="text-center text-gray-400">
+                        Loading banned players...
+                      </TableCell>
+                    </TableRow>
+                  ) : bannedPlayers.length > 0 ? (
+                    bannedPlayers.map((player) => (
+                      <TableRow key={player.name} className="border-[#3C3C3C]">
+                        <TableCell className="font-medium text-gray-300">{player.name}</TableCell>
+                        <TableCell className="text-gray-400">{player.reason}</TableCell>
+                        <TableCell>
+                          <Button
+                            onClick={() => handleUnban(player.name)}
+                            disabled={isLoading}
+                          >
+                            Unban
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow className="border-[#3C3C3C]">
+                      <TableCell colSpan={3} className="text-center text-gray-400">
+                        No banned players
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* Command Console */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Command Console</h2>
-          <div className="bg-gray-900 text-gray-100 p-4 rounded-lg font-mono text-sm h-64 overflow-y-auto mb-4">
+        <div className="bg-[#2C2C2C] rounded-lg shadow-lg p-6 mb-6 border border-[#3C3C3C]">
+          <h2 className="text-xl font-semibold mb-4 text-white">Command Console</h2>
+          <Terminal>
             {commandHistory.map((cmd, index) => (
-              <div key={index} className="mb-2">
-                <span className="text-green-400">$</span> {cmd}
-                {commandOutput[index] && (
-                  <div className="mt-1 text-gray-300 whitespace-pre-wrap">
-                    {commandOutput[index]}
-                  </div>
-                )}
-              </div>
+              <Command 
+                key={index}
+                command={cmd}
+                output={commandOutput[index]}
+              />
             ))}
-          </div>
-          <form onSubmit={handleCommandSubmit} className="flex gap-2">
+          </Terminal>
+          <form onSubmit={handleCommandSubmit} className="flex gap-2 mt-4">
             <input
               type="text"
               value={command}
               onChange={(e) => setCommand(e.target.value)}
               placeholder="Enter command..."
-              className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-4 py-2 bg-[#1A1A1A] border border-[#3C3C3C] rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-300 placeholder-gray-500"
               disabled={serverStatus !== 'online'}
             />
-            <button
+            <Button
               type="submit"
               disabled={isLoading || serverStatus !== 'online'}
-              className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
               Send
-            </button>
+            </Button>
           </form>
         </div>
 
         {/* Server Controls */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">Server Controls</h2>
+        <div className="bg-[#2C2C2C] rounded-lg shadow-lg p-6 border border-[#3C3C3C]">
+          <h2 className="text-xl font-semibold mb-4 text-white">Server Controls</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <button
+            <Button
               onClick={() => handleServerAction('start')}
               disabled={isLoading || serverStatus === 'online'}
-              className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              variant="server-start"
             >
               Start Server
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => handleServerAction('stop')}
               disabled={isLoading || serverStatus === 'offline'}
-              className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              variant="server-stop"
             >
               Stop Server
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => handleServerAction('restart')}
               disabled={isLoading}
-              className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              variant="server-restart"
             >
               Restart Server
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={checkServerStatus}
               disabled={isLoading}
-              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              variant="server-refresh"
             >
               Refresh Status
-            </button>
+            </Button>
           </div>
         </div>
       </div>
