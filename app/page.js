@@ -26,7 +26,8 @@ export default function Home() {
   const [serverInfo, setServerInfo] = useState({
     maxPlayers: 0,
     version: null,
-    error: null
+    error: null,
+    mods: []
   });
   const [command, setCommand] = useState('');
   const [commandHistory, setCommandHistory] = useState([]);
@@ -57,7 +58,8 @@ export default function Home() {
         data.status !== serverStatus ||
         JSON.stringify(data.players) !== JSON.stringify(playerList) ||
         data.maxPlayers !== serverInfo.maxPlayers ||
-        data.version !== serverInfo.version;
+        data.version !== serverInfo.version ||
+        JSON.stringify(data.mods) !== JSON.stringify(serverInfo.mods);
 
       if (hasChanges) {
         setServerStatus(data.status || 'offline');
@@ -65,7 +67,8 @@ export default function Home() {
         setServerInfo({
           maxPlayers: data.maxPlayers || 0,
           version: data.version || null,
-          error: data.error || null
+          error: data.error || null,
+          mods: data.mods || []
         });
         setLastUpdate(new Date());
 
@@ -320,12 +323,34 @@ export default function Home() {
           </div>
           
           {/* Server Info */}
-          <div className="mt-4 space-y-2 text-sm text-gray-300">
-            {serverInfo.version && (
-              <div>Version: {serverInfo.version}</div>
-            )}
-            {serverInfo.maxPlayers > 0 && (
-              <div>Max Players: {serverInfo.maxPlayers}</div>
+          <div className="mt-4 space-y-2 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400">Version:</span>
+              <span className="text-gray-300">{serverInfo.version || 'Unknown'}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400">Players:</span>
+              <span className="text-gray-300">{playerList.length} / {serverInfo.maxPlayers}</span>
+            </div>
+            {serverInfo.mods && serverInfo.mods.length > 0 && (
+              <div className="mt-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400">Mods:</span>
+                  <span className="text-gray-300">({serverInfo.mods.length})</span>
+                </div>
+                <div className="mt-1 space-y-1 pl-4">
+                  {serverInfo.mods.map((mod, index) => (
+                    <div key={index} className="flex items-center gap-2 text-gray-300">
+                      <span className="text-gray-400">•</span>
+                      <span className="font-medium">{mod.name}</span>
+                      <span className="text-gray-500">v{mod.version}</span>
+                      {mod.id && (
+                        <span className="text-gray-600 text-xs">({mod.id})</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
             {serverInfo.error && (
               <div className="text-red-400">Connection Error: {serverInfo.error}</div>
@@ -339,19 +364,15 @@ export default function Home() {
             <TabsList className="mb-4 bg-[#1A1A1A] p-1 rounded-none flex gap-1">
               <TabsTrigger 
                 value="online" 
-                className="data-[state=active]:bg-[#4CAF50] data-[state=active]:text-white rounded-none"
+                className="data-[state=active]:bg-[#4CAF50] data-[state=active]:text-white rounded-none px-4 py-2 bg-[#2C2C2C] text-gray-300 hover:bg-[#3C3C3C] transition-colors"
               >
-                <Button variant="green">
-                  Online Players
-                </Button>
+                Online Players
               </TabsTrigger>
               <TabsTrigger 
                 value="banned"
-                className="data-[state=active]:bg-[#B71C1C] data-[state=active]:text-white rounded-none"
+                className="data-[state=active]:bg-[#B71C1C] data-[state=active]:text-white rounded-none px-4 py-2 bg-[#2C2C2C] text-gray-300 hover:bg-[#3C3C3C] transition-colors"
               >
-                <Button variant="red">
-                  Banned Players
-                </Button>
+                Banned Players
               </TabsTrigger>
             </TabsList>
             

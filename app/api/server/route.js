@@ -20,11 +20,6 @@ const CONTROL_SCRIPT = path.join(process.cwd(), 'scripts', 'remote-server-contro
 // Helper function to check server status
 async function checkServerStatus() {
   try {
-    console.log('Attempting to connect to server:', {
-      host: RCON_CONFIG.host,
-      port: RCON_CONFIG.gamePort
-    });
-    
     // First try to get server status
     let serverStatus = {
       success: true,
@@ -36,27 +31,19 @@ async function checkServerStatus() {
     };
 
     try {
-      // Try both status methods
-      let status;
-      try {
-        status = await util.status(RCON_CONFIG.host, RCON_CONFIG.gamePort);
-      } catch (e) {
-        status = await util.statusBedrock(RCON_CONFIG.host, RCON_CONFIG.gamePort);
-      }
-
-      console.log('Server status response:', status);
+      // Try to get server status
+      const status = await util.status(RCON_CONFIG.host, RCON_CONFIG.gamePort);
       
       if (status) {
         serverStatus = {
           ...serverStatus,
           status: 'online',
-          maxPlayers: status.players?.max || 20, // Default to 20 if not available
+          maxPlayers: status.players?.max || 20,
           version: status.version?.name || 'Unknown'
         };
       }
     } catch (statusError) {
-      console.error('Failed to get server status:', statusError);
-      // Don't set error here, just keep status as offline
+      // Don't log this error as it's expected when server is offline
     }
 
     // Then try to get player list via RCON
@@ -72,27 +59,116 @@ async function checkServerStatus() {
       await rcon.end();
 
       // Parse player list response
+      const match = playerList.match(/There are (\d+) of a max of (\d+) players online:/);
+      if (match) {
+        serverStatus.maxPlayers = parseInt(match[2]);
+      }
+
       const players = playerList
-        .split(':')[1] // Get the part after "There are X of a max of Y players online:"
+        .split(':')[1]
         .trim()
         .split(',')
         .map(p => p.trim())
         .filter(p => p.length > 0);
 
       serverStatus.players = players;
-      // If we got a player list, the server is definitely online
       serverStatus.status = 'online';
     } catch (rconError) {
-      console.error('Failed to get player list:', rconError);
-      // Only set error if we couldn't get server status either
       if (serverStatus.status === 'offline') {
         serverStatus.error = rconError.message;
       }
     }
 
+    // Always try to get version via RCON if server is online
+    if (serverStatus.status === 'online') {
+      try {
+        const rcon = new Rcon({
+          host: RCON_CONFIG.host,
+          port: RCON_CONFIG.port,
+          password: RCON_CONFIG.password
+        });
+
+        await rcon.connect();
+        
+        // Try forge mods command first
+        try {
+          const modsResponse = await rcon.send('forge mods');
+
+          // Extract version from the first line (minecraft server version)
+          const versionMatch = modsResponse.match(/minecraft server-(\d+\.\d+\.\d+)/);
+          if (versionMatch) {
+            serverStatus.version = versionMatch[1];
+          }
+
+          // Parse mod list
+          const modLines = modsResponse.split('\n').filter(line => line.trim().startsWith('•'));
+          serverStatus.mods = modLines.map(line => {
+            const match = line.match(/• (.+) : (.+) \((\d+\.\d+\.\d+)\) - (\d+)/);
+            if (match) {
+              return {
+                name: match[1],
+                id: match[2],
+                version: match[3],
+                priority: parseInt(match[4])
+              };
+            }
+            return null;
+          }).filter(mod => mod !== null);
+
+        } catch (modsError) {
+          // Fallback to standard version commands if forge mods fails
+          const commands = ['version', 'ver', 'about', 'help'];
+          for (const cmd of commands) {
+            try {
+              const response = await rcon.send(cmd);
+
+              const patterns = [
+                /This server is running (.+)/,
+                /Minecraft server version (.+)/,
+                /Server version: (.+)/,
+                /Version: (.+)/,
+                /Minecraft (.+)/,
+                /Paper (.+)/,
+                /Spigot (.+)/,
+                /Bukkit (.+)/
+              ];
+
+              for (const pattern of patterns) {
+                const versionMatch = response.match(pattern);
+                if (versionMatch) {
+                  serverStatus.version = versionMatch[1];
+                  break;
+                }
+              }
+
+              if (serverStatus.version) break;
+            } catch (cmdError) {
+              // Don't log individual command failures
+            }
+          }
+        }
+
+        await rcon.end();
+      } catch (versionError) {
+        // Don't log version check errors
+      }
+    }
+
+    // Only log the final status if there are changes
+    if (serverStatus.status === 'online' || serverStatus.error) {
+      console.log('Server status:', {
+        status: serverStatus.status,
+        players: serverStatus.players.length,
+        maxPlayers: serverStatus.maxPlayers,
+        version: serverStatus.version,
+        mods: serverStatus.mods?.length || 0,
+        error: serverStatus.error
+      });
+    }
+
     return serverStatus;
   } catch (error) {
-    console.error('Server status check failed:', error);
+    console.error('Server status check failed:', error.message);
     return {
       success: true,
       status: 'offline',
